@@ -45,6 +45,7 @@ const DEFAULT_GHOST_VISIBILITY = {
 
 const PACMAN_SPEED = 5.4
 const GHOST_SPEED = 4.4
+const GHOST_RETURN_SPEED = 6.2
 const FRIGHTENED_GHOST_SPEED = GHOST_SPEED / 2
 const FRIGHTENED_DURATION = 7
 const DEATH_FREEZE = 0.8
@@ -569,6 +570,20 @@ const chooseGhostDirection = (state, ghost) => {
     }
   }
 
+  if (ghost.mode === 'returning') {
+    const gateX = ghost.homeX <= GHOST_DOOR_COLUMNS[0] ? GHOST_DOOR_COLUMNS[0] : GHOST_DOOR_COLUMNS[1]
+    const gateY = GHOST_EXIT_ROW + 1
+    const gateDir = findPathDirection(state.maze, ghost.tileX, ghost.tileY, gateX, gateY, 'ghost')
+    if (gateDir && options.includes(gateDir)) {
+      return gateDir
+    }
+
+    const homeDir = findPathDirection(state.maze, ghost.tileX, ghost.tileY, ghost.homeX, ghost.homeY, 'ghost')
+    if (homeDir && options.includes(homeDir)) {
+      return homeDir
+    }
+  }
+
   if (ghost.mode === 'chase') {
     const axisDir = getRouteAxisDirection(state, ghost)
     if (axisDir && options.includes(axisDir)) {
@@ -875,7 +890,7 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
           if (!isGhostEnabled(ghost)) {
             return
           }
-          if (ghost.mode !== 'pen') {
+          if (ghost.mode !== 'pen' && ghost.mode !== 'returning') {
             ghost.dir = OPPOSITE_DIRECTION[ghost.dir]
             ghost.progress = 0
           }
@@ -933,12 +948,32 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
         }
       }
 
+      if (ghost.mode === 'returning') {
+        const atHome = ghost.tileX === ghost.homeX && ghost.tileY === ghost.homeY
+        const atPenGate = ghost.tileY === GHOST_EXIT_ROW + 1 && GHOST_DOOR_COLUMNS.includes(ghost.tileX)
+        const inPenChamber = ghost.tileY >= GHOST_EXIT_ROW + 1 && ghost.tileY <= GHOST_EXIT_ROW + 2 && ghost.tileX >= 12 && ghost.tileX <= 15
+        if (atHome || atPenGate || inPenChamber) {
+          ghost.tileX = ghost.homeX
+          ghost.tileY = ghost.homeY
+          ghost.progress = 0
+          ghost.mode = 'pen'
+          ghost.dir = 'up'
+          ghost.releaseTimer = 0.6
+          ghost.exitPathIndex = 0
+        }
+      }
+
       if (ghost.mode === 'pen') {
         return
       }
 
-      const frightened = state.frightenedTimer > 0 && ghost.mode !== 'pen'
-      const speed = frightened ? FRIGHTENED_GHOST_SPEED : GHOST_SPEED
+      let speed = GHOST_SPEED
+      if (ghost.mode === 'returning') {
+        speed = GHOST_RETURN_SPEED
+      } else {
+        const frightened = state.frightenedTimer > 0 && ghost.mode !== 'pen'
+        speed = frightened ? FRIGHTENED_GHOST_SPEED : GHOST_SPEED
+      }
 
       moveActor(state, ghost, speed, dt, 'ghost', () => chooseGhostDirection(state, ghost))
     }
@@ -1354,6 +1389,32 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
       const x = ghostPos.x * state.tileW + state.tileW / 2
       const y = ghostPos.y * state.tileH + state.tileH / 2
       const r = state.unit * 0.38
+      const eyeDir = DIRECTIONS[ghost.dir] ?? { x: 0, y: 0 }
+      const eyeOffsetX = eyeDir.x * r * 0.2
+      const eyeOffsetY = eyeDir.y * r * 0.2
+      const wobbleSeed = ghost.homeX * 0.7 + ghost.homeY * 0.41
+      const wobble = Math.sin(state.blinkTimer * 11 + wobbleSeed) * r * 0.035
+      const eyeWhiteR = r * 0.31
+      const pupilR = r * 0.15
+      const leftEyeX = x - r * 0.32
+      const rightEyeX = x + r * 0.32
+      const eyeY = y - r * 0.12
+
+      if (ghost.mode === 'returning') {
+        ctx.fillStyle = '#ffffff'
+        ctx.beginPath()
+        ctx.arc(leftEyeX, eyeY, eyeWhiteR, 0, Math.PI * 2)
+        ctx.arc(rightEyeX, eyeY, eyeWhiteR, 0, Math.PI * 2)
+        ctx.fill()
+
+        ctx.fillStyle = '#18344c'
+        ctx.beginPath()
+        ctx.arc(leftEyeX + eyeOffsetX - wobble, eyeY + eyeOffsetY + wobble * 0.4, pupilR, 0, Math.PI * 2)
+        ctx.arc(rightEyeX + eyeOffsetX + wobble, eyeY + eyeOffsetY - wobble * 0.4, pupilR, 0, Math.PI * 2)
+        ctx.fill()
+        return
+      }
+
       const frightened = state.frightenedTimer > 0 && ghost.mode !== 'pen'
       const flashing = state.frightenedTimer < 2 && Math.floor(state.blinkTimer * 8) % 2 === 0
       const ghostColor = frightened ? (flashing ? '#f5f5f5' : '#2f66ff') : ghost.color
@@ -1369,17 +1430,6 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
       ctx.lineTo(x - r, y + r * 0.85)
       ctx.closePath()
       ctx.fill()
-
-      const eyeDir = DIRECTIONS[ghost.dir] ?? { x: 0, y: 0 }
-      const eyeOffsetX = eyeDir.x * r * 0.2
-      const eyeOffsetY = eyeDir.y * r * 0.2
-      const wobbleSeed = ghost.homeX * 0.7 + ghost.homeY * 0.41
-      const wobble = Math.sin(state.blinkTimer * 11 + wobbleSeed) * r * 0.035
-      const eyeWhiteR = r * 0.31
-      const pupilR = r * 0.15
-      const leftEyeX = x - r * 0.32
-      const rightEyeX = x + r * 0.32
-      const eyeY = y - r * 0.12
 
       ctx.fillStyle = frightened ? '#f4f8ff' : '#ffffff'
       ctx.beginPath()
@@ -1643,6 +1693,9 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
           if (!isGhostEnabled(ghost)) {
             continue
           }
+          if (ghost.mode === 'returning') {
+            continue
+          }
 
           const ghostPos = getActorPosition(ghost, state.width)
           const dx = ghostPos.x - pacmanPos.x
@@ -1652,13 +1705,8 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
           }
 
           if (state.frightenedTimer > 0 && ghost.mode !== 'pen') {
-            ghost.tileX = ghost.homeX
-            ghost.tileY = ghost.homeY
-            ghost.dir = 'up'
+            ghost.mode = 'returning'
             ghost.progress = 0
-            ghost.mode = 'pen'
-            ghost.releaseTimer = 0.8
-            ghost.exitPathIndex = 0
             ghost.routeIndex = (ghost.routeIndex + 2) % ghost.route.length
             state.ghostCombo += 1
             setScore((prev) => prev + 200 * state.ghostCombo)
