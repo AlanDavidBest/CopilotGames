@@ -604,15 +604,18 @@ const moveActor = (state, actor, speed, dt, actorType, chooseDir) => {
   return true
 }
 
-export default function PacmanViewport() {
+export default function PacmanViewport({ showDebugPaths = false, ghostVisibility = DEFAULT_GHOST_VISIBILITY }) {
   const canvasRef = useRef(null)
   const directionRef = useRef('left')
   const debugPathsRef = useRef(false)
   const ghostVisibilityRef = useRef(DEFAULT_GHOST_VISIBILITY)
+  const audioRef = useRef({
+    ctx: null,
+    master: null,
+    unlocked: false,
+  })
   const [score, setScore] = useState(0)
   const [lives, setLives] = useState(3)
-  const [showDebugPaths, setShowDebugPaths] = useState(false)
-  const [ghostVisibility, setGhostVisibility] = useState(DEFAULT_GHOST_VISIBILITY)
 
   useEffect(() => {
     debugPathsRef.current = showDebugPaths
@@ -623,6 +626,164 @@ export default function PacmanViewport() {
   }, [ghostVisibility])
 
   useEffect(() => {
+    const ensureAudio = () => {
+      if (audioRef.current.ctx) {
+        return audioRef.current.ctx
+      }
+
+      const AudioCtor = window.AudioContext || window.webkitAudioContext
+      if (!AudioCtor) {
+        return null
+      }
+
+      const ctx = new AudioCtor()
+      const master = ctx.createGain()
+      master.gain.value = 0.34
+      master.connect(ctx.destination)
+      audioRef.current.ctx = ctx
+      audioRef.current.master = master
+      return ctx
+    }
+
+    const unlockAudio = () => {
+      const ctx = ensureAudio()
+      if (!ctx) {
+        return
+      }
+      if (ctx.state === 'suspended') {
+        void ctx.resume()
+      }
+      audioRef.current.unlocked = true
+    }
+
+    const playTone = ({
+      type = 'square',
+      freq = 440,
+      endFreq = null,
+      duration = 0.08,
+      delay = 0,
+      volume = 0.2,
+      attack = 0.003,
+      release = 0.04,
+    }) => {
+      const ctx = ensureAudio()
+      const master = audioRef.current.master
+      if (!ctx || !master || !audioRef.current.unlocked) {
+        return
+      }
+
+      const start = ctx.currentTime + delay
+      const end = start + duration
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+
+      osc.type = type
+      osc.frequency.setValueAtTime(freq, start)
+      if (endFreq != null) {
+        osc.frequency.linearRampToValueAtTime(endFreq, end)
+      }
+
+      gain.gain.setValueAtTime(0.0001, start)
+      gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, volume), start + attack)
+      gain.gain.exponentialRampToValueAtTime(0.0001, Math.max(start + attack + 0.001, end - release))
+      gain.gain.exponentialRampToValueAtTime(0.0001, end)
+
+      osc.connect(gain)
+      gain.connect(master)
+      osc.start(start)
+      osc.stop(end + 0.02)
+    }
+
+    const playGulp = () => {
+      const ctx = ensureAudio()
+      const master = audioRef.current.master
+      if (!ctx || !master || !audioRef.current.unlocked) {
+        return
+      }
+
+      const now = ctx.currentTime
+      const bodyOsc = ctx.createOscillator()
+      const textureOsc = ctx.createOscillator()
+      const bodyGain = ctx.createGain()
+      const textureGain = ctx.createGain()
+      const throatFilter = ctx.createBiquadFilter()
+      const rumbleFilter = ctx.createBiquadFilter()
+
+      bodyOsc.type = 'triangle'
+      bodyOsc.frequency.setValueAtTime(170, now)
+      bodyOsc.frequency.exponentialRampToValueAtTime(112, now + 0.09)
+
+      textureOsc.type = 'sine'
+      textureOsc.frequency.setValueAtTime(95, now)
+      textureOsc.frequency.exponentialRampToValueAtTime(72, now + 0.1)
+
+      throatFilter.type = 'bandpass'
+      throatFilter.frequency.setValueAtTime(430, now)
+      throatFilter.frequency.exponentialRampToValueAtTime(290, now + 0.1)
+      throatFilter.Q.setValueAtTime(1.1, now)
+
+      rumbleFilter.type = 'lowpass'
+      rumbleFilter.frequency.setValueAtTime(230, now)
+      rumbleFilter.frequency.exponentialRampToValueAtTime(150, now + 0.1)
+      rumbleFilter.Q.setValueAtTime(0.55, now)
+
+      // Smooth gulp envelope: soft attack, broad body, natural tail.
+      bodyGain.gain.setValueAtTime(0.0001, now)
+      bodyGain.gain.exponentialRampToValueAtTime(0.17, now + 0.02)
+      bodyGain.gain.exponentialRampToValueAtTime(0.09, now + 0.06)
+      bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.005)
+
+      textureGain.gain.setValueAtTime(0.0001, now)
+      textureGain.gain.exponentialRampToValueAtTime(0.095, now + 0.018)
+      textureGain.gain.exponentialRampToValueAtTime(0.045, now + 0.055)
+      textureGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.105)
+
+      bodyOsc.connect(throatFilter)
+      throatFilter.connect(bodyGain)
+      bodyGain.connect(master)
+
+      textureOsc.connect(rumbleFilter)
+      rumbleFilter.connect(textureGain)
+      textureGain.connect(master)
+
+      bodyOsc.start(now)
+      textureOsc.start(now + 0.004)
+      bodyOsc.stop(now + 0.13)
+      textureOsc.stop(now + 0.12)
+    }
+
+    const playSfx = (name) => {
+      switch (name) {
+        case 'pellet':
+          playGulp()
+          break
+        case 'power':
+          playTone({ type: 'triangle', freq: 370, endFreq: 520, duration: 0.09, volume: 0.14, release: 0.05 })
+          playTone({ type: 'triangle', freq: 520, endFreq: 380, duration: 0.08, delay: 0.08, volume: 0.11, release: 0.04 })
+          break
+        case 'ghost-eaten':
+          playTone({ type: 'sawtooth', freq: 780, endFreq: 430, duration: 0.12, volume: 0.13, release: 0.05 })
+          playTone({ type: 'square', freq: 460, endFreq: 300, duration: 0.09, delay: 0.05, volume: 0.1, release: 0.04 })
+          break
+        case 'death':
+          // Short descending musical run with crescendo (louder toward the end).
+          ;[740, 698, 659, 587, 523, 466, 415, 370].forEach((note, index) => {
+            const delay = index * 0.055
+            const volume = 0.05 + index * 0.013
+            playTone({ type: 'triangle', freq: note, endFreq: note * 0.96, duration: 0.09, delay, volume, release: 0.045 })
+            playTone({ type: 'sawtooth', freq: note * 0.5, endFreq: note * 0.46, duration: 0.08, delay: delay + 0.008, volume: volume * 0.45, release: 0.04 })
+          })
+          break
+        case 'level-clear':
+          playTone({ type: 'square', freq: 520, duration: 0.07, volume: 0.1 })
+          playTone({ type: 'square', freq: 660, duration: 0.07, delay: 0.08, volume: 0.1 })
+          playTone({ type: 'square', freq: 880, duration: 0.1, delay: 0.16, volume: 0.11 })
+          break
+        default:
+          break
+      }
+    }
+
     const canvas = canvasRef.current
     const ctx = canvas.getContext('2d')
     const isGhostEnabled = (ghost) => ghostVisibilityRef.current[ghost.personality] !== false
@@ -671,6 +832,7 @@ export default function PacmanViewport() {
       if (tile === '.') {
         state.maze[ty][tx] = ' '
         setScore((prev) => prev + 10)
+        playSfx('pellet')
       } else if (tile === 'o') {
         state.maze[ty][tx] = ' '
         state.frightenedTimer = FRIGHTENED_DURATION
@@ -685,10 +847,12 @@ export default function PacmanViewport() {
           }
         })
         setScore((prev) => prev + 50)
+        playSfx('power')
       }
 
       const hasConsumables = state.maze.some((row) => row.some((cell) => cell === '.' || cell === 'o'))
       if (!hasConsumables) {
+        playSfx('level-clear')
         resetLevel()
       }
     }
@@ -1130,6 +1294,7 @@ export default function PacmanViewport() {
     }
 
     const onKeyDown = (event) => {
+      unlockAudio()
       const dir = DIR_KEYS[event.code]
       if (!dir) {
         return
@@ -1185,10 +1350,12 @@ export default function PacmanViewport() {
             ghost.routeIndex = (ghost.routeIndex + 2) % ghost.route.length
             state.ghostCombo += 1
             setScore((prev) => prev + 200 * state.ghostCombo)
+            playSfx('ghost-eaten')
             continue
           }
 
           state.deathFreeze = DEATH_FREEZE
+          playSfx('death')
           setLives((prev) => Math.max(0, prev - 1))
           resetActors(state)
           directionRef.current = 'left'
@@ -1215,11 +1382,13 @@ export default function PacmanViewport() {
     frameId = window.requestAnimationFrame(loop)
     window.addEventListener('resize', resize)
     window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('pointerdown', unlockAudio)
 
     return () => {
       window.cancelAnimationFrame(frameId)
       window.removeEventListener('resize', resize)
       window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('pointerdown', unlockAudio)
     }
   }, [])
 
@@ -1234,29 +1403,6 @@ export default function PacmanViewport() {
         <div className="pacman-overlay-right">
           <div className="pacman-overlay-controls">
             <span>WASD / Arrows</span>
-            <button type="button" className="hud-button pacman-debug-button" onClick={() => setShowDebugPaths((prev) => !prev)}>
-              Debug Paths: {showDebugPaths ? 'On' : 'Off'}
-            </button>
-          </div>
-          <div className="pacman-ghost-toggles">
-            {GHOST_PERSONALITIES.map((name) => {
-              const isOn = ghostVisibility[name] !== false
-              return (
-                <button
-                  key={name}
-                  type="button"
-                  className={`hud-button pacman-ghost-toggle ${isOn ? '' : 'is-off'}`}
-                  onClick={() =>
-                    setGhostVisibility((prev) => ({
-                      ...prev,
-                      [name]: !isOn,
-                    }))
-                  }
-                >
-                  {name}: {isOn ? 'On' : 'Off'}
-                </button>
-              )
-            })}
           </div>
         </div>
       </div>

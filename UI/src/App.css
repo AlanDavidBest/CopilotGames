@@ -504,6 +504,17 @@
   color: #9abfca;
 }
 
+.pacman-side-debug-controls {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+
+.pacman-ghost-toggles-panel {
+  justify-content: flex-start;
+  max-width: none;
+}
+
 .spaceinvaders-center-wrap {
   width: 100%;
   height: 100%;
