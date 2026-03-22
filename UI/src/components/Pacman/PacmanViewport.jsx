@@ -49,8 +49,21 @@ const FRIGHTENED_GHOST_SPEED = GHOST_SPEED / 2
 const FRIGHTENED_DURATION = 7
 const DEATH_FREEZE = 0.8
 const WAVE_INTRO_DURATION = 2
+const FRUIT_SPAWN_TIME = 10
+const FRUIT_DURATION = 9
 const GHOST_EXIT_ROW = 9
 const GHOST_DOOR_COLUMNS = [13, 14]
+
+const FRUIT_TYPES = [
+  { name: 'cherry', points: 100 },
+  { name: 'strawberry', points: 300 },
+  { name: 'orange', points: 500 },
+  { name: 'apple', points: 700 },
+  { name: 'melon', points: 1000 },
+  { name: 'galaxian', points: 2000 },
+  { name: 'bell', points: 3000 },
+  { name: 'key', points: 5000 },
+]
 
 const GHOST_ROUTES = {
   blinky: [
@@ -806,7 +819,15 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
       deathFreeze: 0,
       waveIntroTimer: 0,
       awaitingFirstInput: true,
+      levelIndex: 0,
+      waveElapsed: 0,
+      fruitActive: false,
+      fruitSpawnedThisWave: false,
+      fruitTimer: 0,
+      fruitPickupLock: true,
     }
+
+    const getCurrentFruit = () => FRUIT_TYPES[Math.min(state.levelIndex, FRUIT_TYPES.length - 1)]
 
     const resize = () => {
       const dpr = window.devicePixelRatio || 1
@@ -821,12 +842,20 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
 
-    const resetLevel = () => {
+    const resetLevel = (advanceLevel = false) => {
+      if (advanceLevel) {
+        state.levelIndex += 1
+      }
       state.maze = cloneMaze()
       resetActors(state)
       directionRef.current = 'left'
       state.waveIntroTimer = WAVE_INTRO_DURATION
       state.awaitingFirstInput = true
+      state.waveElapsed = 0
+      state.fruitActive = false
+      state.fruitSpawnedThisWave = false
+      state.fruitTimer = 0
+      state.fruitPickupLock = true
     }
 
     const eatCurrentTile = () => {
@@ -855,10 +884,19 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
         playSfx('power')
       }
 
+      if (!state.fruitPickupLock && state.fruitActive && tx === PACMAN_START.x && ty === PACMAN_START.y) {
+        const fruit = getCurrentFruit()
+        state.fruitActive = false
+        state.fruitTimer = 0
+        setScore((prev) => prev + fruit.points)
+        playTone({ type: 'triangle', freq: 620, duration: 0.08, volume: 0.11, release: 0.04 })
+        playTone({ type: 'triangle', freq: 880, duration: 0.12, delay: 0.06, volume: 0.11, release: 0.05 })
+      }
+
       const hasConsumables = state.maze.some((row) => row.some((cell) => cell === '.' || cell === 'o'))
       if (!hasConsumables) {
         playSfx('level-clear')
-        resetLevel()
+        resetLevel(true)
       }
     }
 
@@ -1164,6 +1202,153 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
       ctx.fill()
     }
 
+    const drawFruit = () => {
+      if (!state.fruitActive) {
+        return
+      }
+
+      const fruit = getCurrentFruit()
+      const cx = PACMAN_START.x * state.tileW + state.tileW / 2
+      const cy = PACMAN_START.y * state.tileH + state.tileH / 2
+      const size = state.unit * 0.34
+
+      ctx.save()
+      ctx.translate(cx, cy)
+      ctx.shadowColor = 'rgba(255, 210, 120, 0.25)'
+      ctx.shadowBlur = Math.max(2, state.unit * 0.12)
+
+      switch (fruit.name) {
+        case 'cherry':
+          ctx.strokeStyle = '#7be86e'
+          ctx.lineWidth = Math.max(1.3, state.unit * 0.05)
+          ctx.beginPath()
+          ctx.moveTo(-size * 0.1, -size * 0.72)
+          ctx.quadraticCurveTo(-size * 0.28, -size * 1.02, -size * 0.5, -size * 0.34)
+          ctx.moveTo(size * 0.12, -size * 0.72)
+          ctx.quadraticCurveTo(size * 0.28, -size * 1.02, size * 0.5, -size * 0.34)
+          ctx.stroke()
+          ctx.fillStyle = '#ff435f'
+          ctx.beginPath()
+          ctx.arc(-size * 0.34, size * 0.04, size * 0.36, 0, Math.PI * 2)
+          ctx.arc(size * 0.26, size * 0.04, size * 0.36, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.fillStyle = 'rgba(255,255,255,0.6)'
+          ctx.beginPath()
+          ctx.arc(-size * 0.45, -size * 0.14, size * 0.1, 0, Math.PI * 2)
+          ctx.arc(size * 0.14, -size * 0.14, size * 0.1, 0, Math.PI * 2)
+          ctx.fill()
+          break
+        case 'strawberry':
+          ctx.fillStyle = '#ff516d'
+          ctx.beginPath()
+          ctx.moveTo(0, -size * 0.72)
+          ctx.bezierCurveTo(size * 0.62, -size * 0.72, size * 0.78, size * 0.12, 0, size * 0.84)
+          ctx.bezierCurveTo(-size * 0.78, size * 0.12, -size * 0.62, -size * 0.72, 0, -size * 0.72)
+          ctx.fill()
+          ctx.fillStyle = '#71dc67'
+          ctx.beginPath()
+          ctx.moveTo(0, -size * 0.88)
+          ctx.lineTo(size * 0.18, -size * 0.56)
+          ctx.lineTo(0, -size * 0.66)
+          ctx.lineTo(-size * 0.18, -size * 0.56)
+          ctx.closePath()
+          ctx.fill()
+          ctx.fillStyle = '#ffe9a8'
+          for (let i = -1; i <= 1; i += 1) {
+            for (let j = -1; j <= 1; j += 1) {
+              ctx.fillRect(i * size * 0.2 - 1, j * size * 0.2 + size * 0.02, 2, 2)
+            }
+          }
+          break
+        case 'orange':
+          ctx.fillStyle = '#ff9d2e'
+          ctx.beginPath()
+          ctx.arc(0, 0, size * 0.54, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.fillStyle = '#72d868'
+          ctx.beginPath()
+          ctx.ellipse(size * 0.18, -size * 0.5, size * 0.18, size * 0.1, -0.45, 0, Math.PI * 2)
+          ctx.fill()
+          break
+        case 'apple':
+          ctx.fillStyle = '#ff4f52'
+          ctx.beginPath()
+          ctx.arc(-size * 0.18, 0, size * 0.42, 0, Math.PI * 2)
+          ctx.arc(size * 0.18, 0, size * 0.42, 0, Math.PI * 2)
+          ctx.fillRect(-size * 0.42, 0, size * 0.84, size * 0.42)
+          ctx.fillStyle = '#5fbe5b'
+          ctx.beginPath()
+          ctx.ellipse(size * 0.18, -size * 0.55, size * 0.22, size * 0.11, -0.55, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.strokeStyle = '#744d2d'
+          ctx.lineWidth = Math.max(1.3, state.unit * 0.05)
+          ctx.beginPath()
+          ctx.moveTo(0, -size * 0.28)
+          ctx.lineTo(0, -size * 0.72)
+          ctx.stroke()
+          break
+        case 'melon':
+          ctx.fillStyle = '#79db74'
+          ctx.beginPath()
+          ctx.ellipse(0, 0, size * 0.62, size * 0.45, 0, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.strokeStyle = '#4fa54d'
+          ctx.lineWidth = Math.max(1.2, state.unit * 0.045)
+          ;[-0.3, 0, 0.3].forEach((offset) => {
+            ctx.beginPath()
+            ctx.moveTo(offset * size, -size * 0.38)
+            ctx.lineTo(offset * size, size * 0.38)
+            ctx.stroke()
+          })
+          break
+        case 'galaxian':
+          ctx.fillStyle = '#ffe978'
+          ctx.beginPath()
+          ctx.moveTo(0, -size * 0.68)
+          ctx.lineTo(size * 0.54, size * 0.14)
+          ctx.lineTo(size * 0.18, size * 0.14)
+          ctx.lineTo(0, size * 0.62)
+          ctx.lineTo(-size * 0.18, size * 0.14)
+          ctx.lineTo(-size * 0.54, size * 0.14)
+          ctx.closePath()
+          ctx.fill()
+          ctx.fillStyle = '#ff5d69'
+          ctx.fillRect(-size * 0.18, -size * 0.04, size * 0.36, size * 0.2)
+          break
+        case 'bell':
+          ctx.fillStyle = '#ffd44f'
+          ctx.beginPath()
+          ctx.moveTo(-size * 0.46, size * 0.28)
+          ctx.quadraticCurveTo(0, -size * 0.7, size * 0.46, size * 0.28)
+          ctx.closePath()
+          ctx.fill()
+          ctx.fillRect(-size * 0.48, size * 0.22, size * 0.96, size * 0.16)
+          ctx.fillStyle = '#7ad970'
+          ctx.fillRect(-size * 0.08, -size * 0.82, size * 0.16, size * 0.16)
+          ctx.fillStyle = '#fff2b8'
+          ctx.beginPath()
+          ctx.arc(0, size * 0.42, size * 0.1, 0, Math.PI * 2)
+          ctx.fill()
+          break
+        case 'key':
+          ctx.strokeStyle = '#65e7ff'
+          ctx.lineWidth = Math.max(2.2, state.unit * 0.08)
+          ctx.beginPath()
+          ctx.arc(-size * 0.18, 0, size * 0.28, 0, Math.PI * 2)
+          ctx.moveTo(size * 0.02, 0)
+          ctx.lineTo(size * 0.6, 0)
+          ctx.lineTo(size * 0.6, size * 0.22)
+          ctx.moveTo(size * 0.38, 0)
+          ctx.lineTo(size * 0.38, size * 0.18)
+          ctx.stroke()
+          break
+        default:
+          break
+      }
+
+      ctx.restore()
+    }
+
     const drawGhost = (ghost) => {
       const ghostPos = getActorPosition(ghost, state.width)
       const x = ghostPos.x * state.tileW + state.tileW / 2
@@ -1185,16 +1370,27 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
       ctx.closePath()
       ctx.fill()
 
+      const eyeDir = DIRECTIONS[ghost.dir] ?? { x: 0, y: 0 }
+      const eyeOffsetX = eyeDir.x * r * 0.2
+      const eyeOffsetY = eyeDir.y * r * 0.2
+      const wobbleSeed = ghost.homeX * 0.7 + ghost.homeY * 0.41
+      const wobble = Math.sin(state.blinkTimer * 11 + wobbleSeed) * r * 0.035
+      const eyeWhiteR = r * 0.31
+      const pupilR = r * 0.15
+      const leftEyeX = x - r * 0.32
+      const rightEyeX = x + r * 0.32
+      const eyeY = y - r * 0.12
+
       ctx.fillStyle = frightened ? '#f4f8ff' : '#ffffff'
       ctx.beginPath()
-      ctx.arc(x - r * 0.28, y - r * 0.08, r * 0.2, 0, Math.PI * 2)
-      ctx.arc(x + r * 0.28, y - r * 0.08, r * 0.2, 0, Math.PI * 2)
+      ctx.arc(leftEyeX, eyeY, eyeWhiteR, 0, Math.PI * 2)
+      ctx.arc(rightEyeX, eyeY, eyeWhiteR, 0, Math.PI * 2)
       ctx.fill()
 
       ctx.fillStyle = frightened ? '#1637a3' : '#18344c'
       ctx.beginPath()
-      ctx.arc(x - r * 0.28, y - r * 0.08, r * 0.09, 0, Math.PI * 2)
-      ctx.arc(x + r * 0.28, y - r * 0.08, r * 0.09, 0, Math.PI * 2)
+      ctx.arc(leftEyeX + eyeOffsetX - wobble, eyeY + eyeOffsetY + wobble * 0.4, pupilR, 0, Math.PI * 2)
+      ctx.arc(rightEyeX + eyeOffsetX + wobble, eyeY + eyeOffsetY - wobble * 0.4, pupilR, 0, Math.PI * 2)
       ctx.fill()
     }
 
@@ -1406,6 +1602,30 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
       if (state.deathFreeze > 0) {
         state.deathFreeze = Math.max(0, state.deathFreeze - dt)
       } else {
+        if (state.fruitPickupLock) {
+          const leftStartTile = state.pacman.tileX !== PACMAN_START.x || state.pacman.tileY !== PACMAN_START.y || state.pacman.progress > 0
+          if (leftStartTile) {
+            state.fruitPickupLock = false
+          }
+        }
+
+        if (!state.awaitingFirstInput) {
+          state.waveElapsed += dt
+        }
+
+        if (!state.fruitSpawnedThisWave && state.waveElapsed >= FRUIT_SPAWN_TIME) {
+          state.fruitSpawnedThisWave = true
+          state.fruitActive = true
+          state.fruitTimer = FRUIT_DURATION
+        }
+
+        if (state.fruitActive) {
+          state.fruitTimer = Math.max(0, state.fruitTimer - dt)
+          if (state.fruitTimer === 0) {
+            state.fruitActive = false
+          }
+        }
+
         if (state.frightenedTimer > 0) {
           state.frightenedTimer = Math.max(0, state.frightenedTimer - dt)
         }
@@ -1451,11 +1671,13 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
           setLives((prev) => Math.max(0, prev - 1))
           resetActors(state)
           directionRef.current = 'left'
+          state.fruitPickupLock = true
           break
         }
       }
 
       drawMaze()
+      drawFruit()
       drawPacman()
       state.ghosts.forEach((ghost) => {
         if (isGhostEnabled(ghost)) {
@@ -1469,10 +1691,7 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
     }
 
     resize()
-    resetActors(state)
-    directionRef.current = 'left'
-    state.waveIntroTimer = WAVE_INTRO_DURATION
-    state.awaitingFirstInput = true
+    resetLevel(false)
     frameId = window.requestAnimationFrame(loop)
     window.addEventListener('resize', resize)
     window.addEventListener('keydown', onKeyDown)
