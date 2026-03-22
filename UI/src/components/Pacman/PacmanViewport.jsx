@@ -945,12 +945,7 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
       const visited = new Set()
       const edgeLW = Math.max(1.5, state.unit * 0.10)
       const cornerR = Math.min(tw, th) * 0.26
-      ctx.strokeStyle = WALL_EDGE
-      ctx.lineWidth = edgeLW
-      ctx.lineCap = 'round'
-      ctx.lineJoin = 'round'
-
-      const strokeRoundedLoop = (points) => {
+      const makeRoundedLoopPath = (points) => {
         if (points.length < 2) return
 
         const pixelPoints = points.map((p) => ({ x: p.x * tw, y: p.y * th }))
@@ -963,17 +958,16 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
           pixelPoints.pop()
         }
 
-        if (pixelPoints.length < 2) return
+        if (pixelPoints.length < 2) return null
+
+        const path = new Path2D()
         if (pixelPoints.length < 3) {
-          ctx.beginPath()
-          ctx.moveTo(pixelPoints[0].x, pixelPoints[0].y)
-          ctx.lineTo(pixelPoints[1].x, pixelPoints[1].y)
-          ctx.stroke()
-          return
+          path.moveTo(pixelPoints[0].x, pixelPoints[0].y)
+          path.lineTo(pixelPoints[1].x, pixelPoints[1].y)
+          return path
         }
 
         const n = pixelPoints.length
-        ctx.beginPath()
         for (let i = 0; i < n; i += 1) {
           const prev = pixelPoints[(i - 1 + n) % n]
           const curr = pixelPoints[i]
@@ -994,13 +988,40 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
           const endX = curr.x + (outDx / outLen) * r
           const endY = curr.y + (outDy / outLen) * r
 
-          if (i === 0) ctx.moveTo(startX, startY)
-          else ctx.lineTo(startX, startY)
+          if (i === 0) path.moveTo(startX, startY)
+          else path.lineTo(startX, startY)
 
-          ctx.arcTo(curr.x, curr.y, endX, endY, r)
+          path.arcTo(curr.x, curr.y, endX, endY, r)
         }
-        ctx.closePath()
-        ctx.stroke()
+        path.closePath()
+        return path
+      }
+
+      const strokeWallPath = (path) => {
+        ctx.save()
+        ctx.lineCap = 'round'
+        ctx.lineJoin = 'round'
+
+        // Wide soft halo
+        ctx.strokeStyle = 'rgba(74, 211, 255, 0.22)'
+        ctx.lineWidth = edgeLW * 3.8
+        ctx.shadowColor = 'rgba(72, 220, 255, 0.75)'
+        ctx.shadowBlur = Math.max(9, state.unit * 0.92)
+        ctx.stroke(path)
+
+        // Mid glow ring
+        ctx.strokeStyle = 'rgba(92, 223, 255, 0.34)'
+        ctx.lineWidth = edgeLW * 2.2
+        ctx.shadowColor = 'rgba(126, 232, 255, 0.72)'
+        ctx.shadowBlur = Math.max(6, state.unit * 0.58)
+        ctx.stroke(path)
+
+        // Crisp tube edge on top
+        ctx.shadowBlur = 0
+        ctx.strokeStyle = WALL_EDGE
+        ctx.lineWidth = edgeLW
+        ctx.stroke(path)
+        ctx.restore()
       }
 
       for (let i = 0; i < edges.length; i += 1) {
@@ -1021,7 +1042,10 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
         }
 
         if (loopPoints.length < 2) continue
-        strokeRoundedLoop(loopPoints)
+        const path = makeRoundedLoopPath(loopPoints)
+        if (path) {
+          strokeWallPath(path)
+        }
       }
       // --- End tube wall rendering ---
 
