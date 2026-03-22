@@ -27,15 +27,10 @@ function LeftPanel() {
   )
 }
 
-function CenterPanel({ onBackToMenu }) {
+function CenterPanel() {
   return (
     <>
       <SpaceInvadersViewport />
-      <div className="hud-actions">
-        <button type="button" className="hud-button" onClick={onBackToMenu}>
-          Exit To Menu
-        </button>
-      </div>
     </>
   )
 }
@@ -54,11 +49,12 @@ function RightPanel() {
   )
 }
 
-function BottomPanel() {
+function BottomPanel({ onBackToMenu }) {
   return (
     <>
       <div className="hud-wave" aria-hidden="true" />
       <div className="hud-bottom-row">
+        <button type="button" className="hud-button" onClick={onBackToMenu}>Exit To Menu</button>
         <button type="button" className="hud-button">Overcharge</button>
         <button type="button" className="hud-button">Barrier</button>
         <button type="button" className="hud-button">Radar</button>

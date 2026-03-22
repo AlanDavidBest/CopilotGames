@@ -58,17 +58,12 @@ function LeftPanel() {
   )
 }
 
-function CenterPanel({ onBackToMenu }) {
+function CenterPanel() {
   const { showDebugPaths, ghostVisibility } = usePacmanHud()
 
   return (
     <>
       <PacmanViewport showDebugPaths={showDebugPaths} ghostVisibility={ghostVisibility} />
-      <div className="hud-actions">
-        <button type="button" className="hud-button" onClick={onBackToMenu}>
-          Exit To Menu
-        </button>
-      </div>
     </>
   )
 }
@@ -114,11 +109,12 @@ function RightPanel() {
   )
 }
 
-function BottomPanel() {
+function BottomPanel({ onBackToMenu }) {
   return (
     <>
       <div className="hud-wave" aria-hidden="true" />
       <div className="hud-bottom-row">
+        <button type="button" className="hud-button" onClick={onBackToMenu}>Exit To Menu</button>
         <button type="button" className="hud-button">Boost</button>
         <button type="button" className="hud-button">Pulse</button>
         <button type="button" className="hud-button">Map</button>

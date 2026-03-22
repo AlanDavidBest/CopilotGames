@@ -29,7 +29,7 @@ function LeftPanel() {
   )
 }
 
-function CenterPanel({ onBackToMenu }) {
+function CenterPanel() {
   return (
     <>
       <div className="hud-core" aria-hidden="true">
@@ -39,12 +39,6 @@ function CenterPanel({ onBackToMenu }) {
         <div className="ring ring-d" />
         <div className="ring-center" />
         <div className="ring-sweep" />
-      </div>
-
-      <div className="hud-actions">
-        <button type="button" className="hud-button" onClick={onBackToMenu}>
-          Exit To Menu
-        </button>
       </div>
     </>
   )
@@ -64,11 +58,12 @@ function RightPanel() {
   )
 }
 
-function BottomPanel() {
+function BottomPanel({ onBackToMenu }) {
   return (
     <>
       <div className="hud-wave" aria-hidden="true" />
       <div className="hud-bottom-row">
+        <button type="button" className="hud-button" onClick={onBackToMenu}>Exit To Menu</button>
         <button type="button" className="hud-button">Map</button>
         <button type="button" className="hud-button">Inventory</button>
         <button type="button" className="hud-button">Comms</button>

@@ -38,15 +38,10 @@ function LeftPanel() {
   )
 }
 
-function CenterPanel({ onBackToMenu }) {
+function CenterPanel() {
   return (
     <>
       <VampireViewport />
-      <div className="hud-actions">
-        <button type="button" className="hud-button" onClick={onBackToMenu}>
-          Exit To Menu
-        </button>
-      </div>
     </>
   )
 }
@@ -82,11 +77,12 @@ function RightPanel() {
   )
 }
 
-function BottomPanel() {
+function BottomPanel({ onBackToMenu }) {
   return (
     <>
       <div className="hud-wave" aria-hidden="true" />
       <div className="hud-bottom-row">
+        <button type="button" className="hud-button" onClick={onBackToMenu}>Exit To Menu</button>
         <button type="button" className="hud-button">Dash</button>
         <button type="button" className="hud-button">Nova</button>
         <button type="button" className="hud-button">Relics</button>
