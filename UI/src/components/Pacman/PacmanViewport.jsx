@@ -48,6 +48,7 @@ const GHOST_SPEED = 4.4
 const FRIGHTENED_GHOST_SPEED = GHOST_SPEED / 2
 const FRIGHTENED_DURATION = 7
 const DEATH_FREEZE = 0.8
+const WAVE_INTRO_DURATION = 2
 const GHOST_EXIT_ROW = 9
 const GHOST_DOOR_COLUMNS = [13, 14]
 
@@ -803,6 +804,8 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
       ghostCombo: 0,
       blinkTimer: 0,
       deathFreeze: 0,
+      waveIntroTimer: 0,
+      awaitingFirstInput: true,
     }
 
     const resize = () => {
@@ -822,6 +825,8 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
       state.maze = cloneMaze()
       resetActors(state)
       directionRef.current = 'left'
+      state.waveIntroTimer = WAVE_INTRO_DURATION
+      state.awaitingFirstInput = true
     }
 
     const eatCurrentTile = () => {
@@ -858,6 +863,10 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
     }
 
     const movePacman = (dt) => {
+      if (state.awaitingFirstInput) {
+        return
+      }
+
       state.pacman.nextDir = directionRef.current
       const moved = moveActor(state, state.pacman, PACMAN_SPEED, dt, 'pacman', () => {
         if (state.pacman.progress === 0) {
@@ -1082,6 +1091,13 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
     }
 
     const drawPacman = () => {
+      if (state.waveIntroTimer > 0) {
+        const visible = Math.floor(state.waveIntroTimer * 8) % 2 === 0
+        if (!visible) {
+          return
+        }
+      }
+
       const pacmanPos = getActorPosition(state.pacman, state.width)
       const px = pacmanPos.x * state.tileW + state.tileW / 2
       const py = pacmanPos.y * state.tileH + state.tileH / 2
@@ -1325,6 +1341,7 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
       }
       event.preventDefault()
       directionRef.current = dir
+      state.awaitingFirstInput = false
     }
 
     let frameId = 0
@@ -1334,6 +1351,9 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
       const dt = Math.min(0.04, (now - last) / 1000)
       last = now
       state.blinkTimer += dt
+      if (state.waveIntroTimer > 0) {
+        state.waveIntroTimer = Math.max(0, state.waveIntroTimer - dt)
+      }
 
       if (state.deathFreeze > 0) {
         state.deathFreeze = Math.max(0, state.deathFreeze - dt)
@@ -1403,6 +1423,8 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
     resize()
     resetActors(state)
     directionRef.current = 'left'
+    state.waveIntroTimer = WAVE_INTRO_DURATION
+    state.awaitingFirstInput = true
     frameId = window.requestAnimationFrame(loop)
     window.addEventListener('resize', resize)
     window.addEventListener('keydown', onKeyDown)
