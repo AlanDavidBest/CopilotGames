@@ -1,5 +1,16 @@
 import VampireViewport from './VampireViewport'
 
+const DEBUG_UPGRADES = [
+  { id: 'wideShot', label: 'Wide Shot' },
+  { id: 'rearShot', label: 'Shoot Behind' },
+  { id: 'leechShot', label: 'Leech Life Shot' },
+  { id: 'damageAura', label: 'Damage Area' },
+  { id: 'orbitingStars', label: 'Orbiting Stars' },
+  { id: 'pickupRange', label: 'Pickup Range' },
+  { id: 'projectiles', label: '+1 Projectile' },
+  { id: 'heavyRounds', label: 'Heavy Rounds' },
+]
+
 function TopPanel() {
   return (
     <>
@@ -41,6 +52,10 @@ function CenterPanel({ onBackToMenu }) {
 }
 
 function RightPanel() {
+  const grantUpgrade = (id) => {
+    window.dispatchEvent(new CustomEvent('vampire:grant-upgrade', { detail: { id } }))
+  }
+
   return (
     <>
       <h2>Telemetry</h2>
@@ -50,6 +65,19 @@ function RightPanel() {
       <p>Wave Type: Swarm</p>
       <p>Curse Level: Rising</p>
       <p>Drop Rate: Normal</p>
+
+      <div className="hud-status-stack">
+        {DEBUG_UPGRADES.map((upgrade) => (
+          <button
+            key={upgrade.id}
+            type="button"
+            className="hud-button"
+            onClick={() => grantUpgrade(upgrade.id)}
+          >
+            {upgrade.label}
+          </button>
+        ))}
+      </div>
     </>
   )
 }

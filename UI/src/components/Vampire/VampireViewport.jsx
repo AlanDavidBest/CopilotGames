@@ -14,6 +14,115 @@ const KEY_TO_DIR = {
   ArrowRight: 'right',
 }
 
+const UPGRADE_LABELS = {
+  wideShot: 'Wide Shot',
+  rearShot: 'Shoot Behind',
+  leechShot: 'Leech Life Shot',
+  damageAura: 'Damage Area',
+  orbitingStars: 'Orbiting Stars',
+  pickupRange: 'Pickup Range',
+  projectiles: '+1 Projectile',
+  heavyRounds: 'Heavy Rounds',
+  rapidFire: 'Rapid Fire',
+  velocity: 'Velocity Boost',
+}
+
+const EMPTY_UPGRADES = {
+  wideShot: 0,
+  rearShot: 0,
+  leechShot: 0,
+  damageAura: 0,
+  orbitingStars: 0,
+  pickupRange: 0,
+}
+
+const applyUpgradeEffect = (state, id) => {
+  switch (id) {
+    case 'wideShot':
+      state.upgrades.wideShot += 1
+      break
+    case 'rearShot':
+      state.upgrades.rearShot += 1
+      break
+    case 'leechShot':
+      state.upgrades.leechShot += 1
+      break
+    case 'damageAura':
+      state.upgrades.damageAura += 1
+      break
+    case 'orbitingStars':
+      state.upgrades.orbitingStars += 1
+      break
+    case 'pickupRange':
+      state.upgrades.pickupRange += 1
+      break
+    case 'projectiles':
+      state.weapon.bulletCount = Math.min(10, state.weapon.bulletCount + 1)
+      state.weapon.spread = Math.min(0.68, state.weapon.spread + 0.04)
+      break
+    case 'rapidFire':
+      state.weapon.fireRate = Math.max(0.045, state.weapon.fireRate - 0.013)
+      break
+    case 'velocity':
+      state.weapon.bulletSpeed = Math.min(980, state.weapon.bulletSpeed + 70)
+      break
+    case 'heavyRounds':
+      state.weapon.bulletDamage = Math.min(9, state.weapon.bulletDamage + 1)
+      state.weapon.bulletSize = Math.min(8, state.weapon.bulletSize + 0.5)
+      break
+    default:
+      break
+  }
+}
+
+// 12x12 hunter sprite (player)
+const HUNTER_SPRITE = [
+  [0,0,0,0,0,1,1,0,0,0,0,0],
+  [0,0,0,0,1,1,1,1,0,0,0,0],
+  [0,0,0,1,1,1,1,1,1,0,0,0],
+  [0,0,0,1,0,1,1,0,1,0,0,0],
+  [0,0,1,1,1,1,1,1,1,1,0,0],
+  [0,0,1,1,0,1,1,0,1,1,0,0],
+  [0,1,1,1,1,1,1,1,1,1,1,0],
+  [0,1,1,1,1,1,1,1,1,1,1,0],
+  [0,0,1,1,1,1,1,1,1,1,0,0],
+  [0,0,1,1,0,0,0,0,1,1,0,0],
+  [0,1,1,0,0,0,0,0,0,1,1,0],
+  [1,1,0,0,0,0,0,0,0,0,1,1],
+]
+
+// 12x12 bat sprite (enemy), two flap frames.
+const BAT_SPRITES = [
+  [
+    [0,0,1,0,0,0,0,0,0,1,0,0],
+    [0,1,1,1,0,0,0,0,1,1,1,0],
+    [1,1,1,1,1,0,0,1,1,1,1,1],
+    [1,1,0,1,1,1,1,1,1,0,1,1],
+    [1,0,0,0,1,1,1,1,0,0,0,1],
+    [0,0,0,1,1,0,0,1,1,0,0,0],
+    [0,0,1,1,1,1,1,1,1,1,0,0],
+    [0,1,1,1,0,1,1,0,1,1,1,0],
+    [0,0,1,1,1,1,1,1,1,1,0,0],
+    [0,0,0,1,1,0,0,1,1,0,0,0],
+    [0,0,1,0,0,0,0,0,0,1,0,0],
+    [0,1,0,0,0,0,0,0,0,0,1,0],
+  ],
+  [
+    [1,0,0,0,0,0,0,0,0,0,0,1],
+    [1,1,0,0,0,0,0,0,0,0,1,1],
+    [1,1,1,0,0,0,0,0,0,1,1,1],
+    [0,1,1,1,1,0,0,1,1,1,1,0],
+    [0,0,1,1,1,1,1,1,1,1,0,0],
+    [0,0,0,1,1,0,0,1,1,0,0,0],
+    [0,0,1,1,1,1,1,1,1,1,0,0],
+    [0,1,1,1,0,1,1,0,1,1,1,0],
+    [0,0,1,1,1,1,1,1,1,1,0,0],
+    [0,0,0,1,1,0,0,1,1,0,0,0],
+    [0,0,1,0,0,0,0,0,0,1,0,0],
+    [0,1,0,0,0,0,0,0,0,0,1,0],
+  ],
+]
+
 const randomRange = (min, max) => min + Math.random() * (max - min)
 
 const spawnEnemy = (width, height, wave) => {
@@ -70,6 +179,7 @@ export default function VampireViewport() {
         maxHp: 100,
       },
       bullets: [],
+      trails: [],
       enemies: [],
       shards: [],
       waveTime: 0,
@@ -90,36 +200,122 @@ export default function VampireViewport() {
       upgradeIndex: 0,
       upgradeToast: '',
       upgradeToastTimer: 0,
+      pausedForUpgrade: false,
+      upgradeChoices: [],
+      upgrades: { ...EMPTY_UPGRADES },
     }
 
-    const upgrades = [
+    const upgradeDefs = [
       {
+        id: 'wideShot',
+        label: 'Wide Shot',
+        detail: 'Adds side volleys that scale with projectile count.',
+        apply: () => applyUpgradeEffect(state, 'wideShot'),
+      },
+      {
+        id: 'rearShot',
+        label: 'Shoot Behind',
+        detail: 'Adds rear volleys that also scale with projectile count.',
+        apply: () => applyUpgradeEffect(state, 'rearShot'),
+      },
+      {
+        id: 'leechShot',
+        label: 'Leech Life Shot',
+        detail: 'Heal a little each kill.',
+        apply: () => applyUpgradeEffect(state, 'leechShot'),
+      },
+      {
+        id: 'damageAura',
+        label: 'Damage Area',
+        detail: 'Small damage pulse around the hunter.',
+        apply: () => applyUpgradeEffect(state, 'damageAura'),
+      },
+      {
+        id: 'orbitingStars',
+        label: 'Orbiting Stars',
+        detail: 'Stars orbit and damage enemies on contact.',
+        apply: () => applyUpgradeEffect(state, 'orbitingStars'),
+      },
+      {
+        id: 'pickupRange',
+        label: 'Pickup Range',
+        detail: 'Pull experience orbs from farther away.',
+        apply: () => applyUpgradeEffect(state, 'pickupRange'),
+      },
+      {
+        id: 'projectiles',
         label: '+1 Projectile',
-        apply: () => {
-          state.weapon.bulletCount = Math.min(6, state.weapon.bulletCount + 1)
-          state.weapon.spread = Math.min(0.45, state.weapon.spread + 0.04)
-        },
+        detail: 'Adds one projectile to every volley pattern.',
+        apply: () => applyUpgradeEffect(state, 'projectiles'),
       },
       {
+        id: 'rapidFire',
         label: 'Rapid Fire',
-        apply: () => {
-          state.weapon.fireRate = Math.max(0.05, state.weapon.fireRate - 0.014)
-        },
+        detail: 'Shoot faster.',
+        apply: () => applyUpgradeEffect(state, 'rapidFire'),
       },
       {
+        id: 'velocity',
         label: 'Velocity Boost',
-        apply: () => {
-          state.weapon.bulletSpeed = Math.min(860, state.weapon.bulletSpeed + 70)
-        },
+        detail: 'Faster projectile speed.',
+        apply: () => applyUpgradeEffect(state, 'velocity'),
       },
       {
+        id: 'heavyRounds',
         label: 'Heavy Rounds',
-        apply: () => {
-          state.weapon.bulletDamage = Math.min(5, state.weapon.bulletDamage + 1)
-          state.weapon.bulletSize = Math.min(6.5, state.weapon.bulletSize + 0.55)
-        },
+        detail: 'Bigger and stronger bullets.',
+        apply: () => applyUpgradeEffect(state, 'heavyRounds'),
       },
     ]
+
+    const rollUpgradeChoices = () => {
+      const pool = [...upgradeDefs]
+      const picks = []
+      while (picks.length < 3 && pool.length > 0) {
+        const index = Math.floor(Math.random() * pool.length)
+        picks.push(pool.splice(index, 1)[0])
+      }
+      state.upgradeChoices = picks
+      state.pausedForUpgrade = true
+    }
+
+    const chooseUpgrade = (choiceIndex) => {
+      if (!state.pausedForUpgrade || state.gameOver) return
+      const choice = state.upgradeChoices[choiceIndex]
+      if (!choice) return
+
+      choice.apply()
+      state.upgradeToast = choice.label
+      state.upgradeToastTimer = 1.8
+      state.upgradeChoices = []
+      state.pausedForUpgrade = false
+    }
+
+    const onGrantUpgrade = (event) => {
+      const upgradeId = event?.detail?.id
+      if (!upgradeId || state.gameOver) return
+      applyUpgradeEffect(state, upgradeId)
+      const label = UPGRADE_LABELS[upgradeId]
+      if (label) {
+        state.upgradeToast = label
+        state.upgradeToastTimer = 1.2
+      }
+    }
+
+    const getUpgradeCardRects = () => {
+      const cardW = Math.min(260, state.width * 0.28)
+      const cardH = 146
+      const gap = Math.min(20, state.width * 0.03)
+      const totalW = cardW * 3 + gap * 2
+      const startX = (state.width - totalW) / 2
+      const y = state.height * 0.27
+      return [0, 1, 2].map((index) => ({
+        x: startX + index * (cardW + gap),
+        y,
+        w: cardW,
+        h: cardH,
+      }))
+    }
 
     const resize = () => {
       const dpr = window.devicePixelRatio || 1
@@ -141,29 +337,50 @@ export default function VampireViewport() {
     }
 
     const fireTowardsPointer = () => {
-      if (state.fireCooldown > 0 || state.gameOver) return
+      if (state.fireCooldown > 0 || state.gameOver || state.pausedForUpgrade) return
       const dx = pointerRef.current.x - state.player.x
       const dy = pointerRef.current.y - state.player.y
       const mag = Math.hypot(dx, dy)
       if (mag < 3) return
 
+      const volleyAngles = []
       const baseAngle = Math.atan2(dy, dx)
+      volleyAngles.push(baseAngle)
+
+      const widePairs = state.upgrades.wideShot
+      for (let i = 0; i < widePairs; i += 1) {
+        const offset = 0.42 + i * 0.13
+        volleyAngles.push(baseAngle + offset)
+        volleyAngles.push(baseAngle - offset)
+      }
+
+      const rearPairs = state.upgrades.rearShot
+      for (let i = 0; i < rearPairs; i += 1) {
+        const rearBase = baseAngle + Math.PI
+        const fan = i * 0.12
+        volleyAngles.push(rearBase + fan)
+        if (fan > 0) volleyAngles.push(rearBase - fan)
+      }
+
       const count = state.weapon.bulletCount
       const spread = state.weapon.spread
-      for (let i = 0; i < count; i += 1) {
-        const t = count === 1 ? 0 : i / (count - 1)
-        const offset = (t - 0.5) * spread
-        const shotAngle = baseAngle + offset
-        state.bullets.push({
-          x: state.player.x,
-          y: state.player.y,
-          vx: Math.cos(shotAngle) * state.weapon.bulletSpeed,
-          vy: Math.sin(shotAngle) * state.weapon.bulletSpeed,
-          life: 1.18,
-          damage: state.weapon.bulletDamage,
-          size: state.weapon.bulletSize,
-        })
-      }
+      volleyAngles.forEach((volleyAngle) => {
+        for (let i = 0; i < count; i += 1) {
+          const t = count === 1 ? 0 : i / (count - 1)
+          const offset = (t - 0.5) * spread
+          const shotAngle = volleyAngle + offset
+          state.bullets.push({
+            x: state.player.x,
+            y: state.player.y,
+            vx: Math.cos(shotAngle) * state.weapon.bulletSpeed,
+            vy: Math.sin(shotAngle) * state.weapon.bulletSpeed,
+            life: 1.18,
+            damage: state.weapon.bulletDamage,
+            size: state.weapon.bulletSize,
+            hue: (state.elapsed * 180 + shotAngle * 90 + i * 22) % 360,
+          })
+        }
+      })
 
       state.fireCooldown = state.weapon.fireRate
     }
@@ -179,7 +396,44 @@ export default function VampireViewport() {
       pointerRef.current.active = false
     }
 
+    const onPointerDown = (event) => {
+      if (!state.pausedForUpgrade || state.gameOver) return
+      const rect = canvas.getBoundingClientRect()
+      const x = event.clientX - rect.left
+      const y = event.clientY - rect.top
+      const cardRects = getUpgradeCardRects()
+      for (let i = 0; i < cardRects.length; i += 1) {
+        const card = cardRects[i]
+        const inside = x >= card.x && x <= card.x + card.w && y >= card.y && y <= card.y + card.h
+        if (inside) {
+          chooseUpgrade(i)
+          break
+        }
+      }
+    }
+
     const onKeyDown = (event) => {
+      if (state.pausedForUpgrade && !state.gameOver) {
+        if (event.code === 'Digit1' || event.code === 'Numpad1') {
+          chooseUpgrade(0)
+          event.preventDefault()
+          return
+        }
+        if (event.code === 'Digit2' || event.code === 'Numpad2') {
+          chooseUpgrade(1)
+          event.preventDefault()
+          return
+        }
+        if (event.code === 'Digit3' || event.code === 'Numpad3') {
+          chooseUpgrade(2)
+          event.preventDefault()
+          return
+        }
+
+        event.preventDefault()
+        return
+      }
+
       const dir = KEY_TO_DIR[event.code]
       if (!dir) return
       controlsRef.current[dir] = true
@@ -199,10 +453,12 @@ export default function VampireViewport() {
     const loop = (now) => {
       const dt = Math.min(0.033, (now - last) / 1000)
       last = now
-      state.elapsed += dt
-      state.waveTime += dt
+      if (!state.pausedForUpgrade) {
+        state.elapsed += dt
+        state.waveTime += dt
+      }
 
-      if (!state.gameOver) {
+      if (!state.gameOver && !state.pausedForUpgrade) {
         const moveX = (controlsRef.current.right ? 1 : 0) - (controlsRef.current.left ? 1 : 0)
         const moveY = (controlsRef.current.down ? 1 : 0) - (controlsRef.current.up ? 1 : 0)
         const moveMag = Math.hypot(moveX, moveY)
@@ -229,13 +485,43 @@ export default function VampireViewport() {
         }
 
         state.bullets = state.bullets
-          .map((bullet) => ({
-            ...bullet,
-            x: bullet.x + bullet.vx * dt,
-            y: bullet.y + bullet.vy * dt,
-            life: bullet.life - dt,
-          }))
+          .map((bullet) => {
+            const nextBullet = {
+              ...bullet,
+              x: bullet.x + bullet.vx * dt,
+              y: bullet.y + bullet.vy * dt,
+              life: bullet.life - dt,
+            }
+
+            // Faint multi-color afterimages.
+            state.trails.push({
+              x: bullet.x,
+              y: bullet.y,
+              vx: -bullet.vx * 0.015 + randomRange(-9, 9),
+              vy: -bullet.vy * 0.015 + randomRange(-9, 9),
+              life: randomRange(0.18, 0.34),
+              maxLife: 0.34,
+              size: Math.max(1.2, (bullet.size ?? 3) * randomRange(0.55, 0.95)),
+              hue: (bullet.hue + randomRange(-38, 38) + 360) % 360,
+            })
+
+            return nextBullet
+          })
           .filter((bullet) => bullet.life > 0)
+
+        state.trails = state.trails
+          .map((trail) => ({
+            ...trail,
+            x: trail.x + trail.vx * dt,
+            y: trail.y + trail.vy * dt,
+            life: trail.life - dt,
+            size: Math.max(0.4, trail.size - dt * 3.2),
+          }))
+          .filter((trail) => trail.life > 0)
+
+        if (state.trails.length > 2200) {
+          state.trails.splice(0, state.trails.length - 2200)
+        }
 
         state.enemies.forEach((enemy) => {
           const ex = state.player.x - enemy.x
@@ -244,6 +530,36 @@ export default function VampireViewport() {
           enemy.x += (ex / em) * enemy.speed * dt
           enemy.y += (ey / em) * enemy.speed * dt
         })
+
+        if (state.upgrades.damageAura > 0) {
+          const auraRadius = 56 + state.upgrades.damageAura * 12
+          const auraDps = 8 + state.upgrades.damageAura * 6
+          state.enemies.forEach((enemy) => {
+            const dxAura = enemy.x - state.player.x
+            const dyAura = enemy.y - state.player.y
+            const dAura = Math.hypot(dxAura, dyAura)
+            if (dAura < auraRadius + enemy.radius) {
+              enemy.hp -= auraDps * dt
+            }
+          })
+        }
+
+        if (state.upgrades.orbitingStars > 0) {
+          const starCount = Math.min(8, 2 + state.upgrades.orbitingStars)
+          const starOrbitR = 28 + state.upgrades.orbitingStars * 5
+          const starDps = 26 + state.upgrades.orbitingStars * 12
+          for (let i = 0; i < starCount; i += 1) {
+            const ang = state.elapsed * (2.4 + state.upgrades.orbitingStars * 0.12) + (Math.PI * 2 * i) / starCount
+            const sx = state.player.x + Math.cos(ang) * starOrbitR
+            const sy = state.player.y + Math.sin(ang) * starOrbitR
+            state.enemies.forEach((enemy) => {
+              const d = Math.hypot(enemy.x - sx, enemy.y - sy)
+              if (d < enemy.radius + 6) {
+                enemy.hp -= starDps * dt
+              }
+            })
+          }
+        }
 
         state.bullets = state.bullets.filter((bullet) => {
           for (const enemy of state.enemies) {
@@ -264,6 +580,9 @@ export default function VampireViewport() {
             survivors.push(enemy)
           } else {
             state.shards.push({ x: enemy.x, y: enemy.y, r: 4.5, xp: 18 })
+            if (state.upgrades.leechShot > 0) {
+              state.player.hp = Math.min(state.player.maxHp, state.player.hp + state.upgrades.leechShot * 0.8)
+            }
             setScore((prev) => prev + 12)
           }
         })
@@ -273,7 +592,8 @@ export default function VampireViewport() {
           const dxShard = state.player.x - shard.x
           const dyShard = state.player.y - shard.y
           const d = Math.hypot(dxShard, dyShard)
-          if (d < 120) {
+          const pickupRange = 120 + state.upgrades.pickupRange * 36
+          if (d < pickupRange) {
             shard.x += (dxShard / (d || 1)) * 240 * dt
             shard.y += (dyShard / (d || 1)) * 240 * dt
           }
@@ -282,12 +602,10 @@ export default function VampireViewport() {
             while (state.xp >= state.xpNeed) {
               state.xp -= state.xpNeed
               state.xpNeed = Math.round(state.xpNeed * 1.2)
-              const nextUpgrade = upgrades[state.upgradeIndex % upgrades.length]
-              nextUpgrade.apply()
+              rollUpgradeChoices()
               state.upgradeIndex += 1
-              state.upgradeToast = nextUpgrade.label
-              state.upgradeToastTimer = 1.8
               setLevel((prev) => prev + 1)
+              break
             }
             return false
           }
@@ -338,6 +656,27 @@ export default function VampireViewport() {
         ctx.stroke()
       }
 
+      const drawSprite = (pixels, x, y, pixelSize, color, flipX = false) => {
+        const rows = pixels.length
+        const cols = pixels[0].length
+        const ox = x - (cols * pixelSize) / 2
+        const oy = y - (rows * pixelSize) / 2
+        ctx.fillStyle = color
+
+        for (let r = 0; r < rows; r += 1) {
+          for (let c = 0; c < cols; c += 1) {
+            if (!pixels[r][c]) continue
+            const cc = flipX ? cols - 1 - c : c
+            ctx.fillRect(
+              Math.round(ox + cc * pixelSize),
+              Math.round(oy + r * pixelSize),
+              Math.ceil(pixelSize),
+              Math.ceil(pixelSize),
+            )
+          }
+        }
+      }
+
       state.shards.forEach((shard) => {
         ctx.fillStyle = 'rgba(110, 241, 255, 0.92)'
         ctx.beginPath()
@@ -346,23 +685,22 @@ export default function VampireViewport() {
       })
 
       state.enemies.forEach((enemy) => {
-        ctx.fillStyle = `hsla(${enemy.hue}, 88%, 62%, 0.92)`
-        ctx.beginPath()
-        ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2)
-        ctx.fill()
+        const flap = Math.floor(state.elapsed * 8 + enemy.x * 0.01) % 2
+        const batPixel = Math.max(1.6, (enemy.radius * 2.35) / 12)
+        const enemyColor = `hsla(${enemy.hue}, 88%, 64%, 0.94)`
+        drawSprite(BAT_SPRITES[flap], enemy.x, enemy.y, batPixel, enemyColor)
+      })
 
-        ctx.strokeStyle = 'rgba(255, 194, 226, 0.55)'
-        ctx.lineWidth = 1.2
+      state.trails.forEach((trail) => {
+        const alpha = Math.max(0, trail.life / trail.maxLife) * 0.38
+        ctx.fillStyle = `hsla(${trail.hue}, 95%, 70%, ${alpha.toFixed(3)})`
         ctx.beginPath()
-        ctx.moveTo(enemy.x - enemy.radius * 0.4, enemy.y - enemy.radius * 0.3)
-        ctx.lineTo(enemy.x + enemy.radius * 0.4, enemy.y + enemy.radius * 0.3)
-        ctx.moveTo(enemy.x + enemy.radius * 0.4, enemy.y - enemy.radius * 0.3)
-        ctx.lineTo(enemy.x - enemy.radius * 0.4, enemy.y + enemy.radius * 0.3)
-        ctx.stroke()
+        ctx.arc(trail.x, trail.y, trail.size, 0, Math.PI * 2)
+        ctx.fill()
       })
 
       state.bullets.forEach((bullet) => {
-        ctx.fillStyle = 'rgba(255, 231, 150, 0.95)'
+        ctx.fillStyle = `hsla(${((bullet.hue ?? 52) + 20) % 360}, 95%, 76%, 0.95)`
         ctx.beginPath()
         ctx.arc(bullet.x, bullet.y, bullet.size ?? 3, 0, Math.PI * 2)
         ctx.fill()
@@ -382,14 +720,43 @@ export default function VampireViewport() {
       ctx.stroke()
 
       ctx.fillStyle = 'rgba(255, 214, 106, 0.95)'
-      ctx.beginPath()
-      ctx.arc(state.player.x, state.player.y, state.player.radius, 0, Math.PI * 2)
-      ctx.fill()
+      const playerPixel = (state.player.radius * 2.3) / 12
+      const lookingLeft = pointerRef.current.x < state.player.x
+      drawSprite(HUNTER_SPRITE, state.player.x, state.player.y, playerPixel, 'rgba(255, 214, 106, 0.95)', lookingLeft)
 
       ctx.strokeStyle = 'rgba(255, 252, 232, 0.8)'
       ctx.beginPath()
       ctx.arc(state.player.x, state.player.y, state.player.radius + 6 + Math.sin(state.elapsed * 6) * 1.2, 0, Math.PI * 2)
       ctx.stroke()
+
+      if (state.upgrades.damageAura > 0) {
+        const auraRadius = 56 + state.upgrades.damageAura * 12
+        const pulse = 0.72 + Math.sin(state.elapsed * 5.5) * 0.12
+        ctx.strokeStyle = `rgba(167, 235, 255, ${0.2 + state.upgrades.damageAura * 0.04})`
+        ctx.lineWidth = 1.5
+        ctx.beginPath()
+        ctx.arc(state.player.x, state.player.y, auraRadius * pulse, 0, Math.PI * 2)
+        ctx.stroke()
+      }
+
+      if (state.upgrades.orbitingStars > 0) {
+        const starCount = Math.min(8, 2 + state.upgrades.orbitingStars)
+        const starOrbitR = 28 + state.upgrades.orbitingStars * 5
+        for (let i = 0; i < starCount; i += 1) {
+          const ang = state.elapsed * (2.4 + state.upgrades.orbitingStars * 0.12) + (Math.PI * 2 * i) / starCount
+          const sx = state.player.x + Math.cos(ang) * starOrbitR
+          const sy = state.player.y + Math.sin(ang) * starOrbitR
+          ctx.fillStyle = 'rgba(255, 243, 173, 0.95)'
+          ctx.beginPath()
+          ctx.arc(sx, sy, 3.2, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)'
+          ctx.lineWidth = 1
+          ctx.beginPath()
+          ctx.arc(sx, sy, 4.5, 0, Math.PI * 2)
+          ctx.stroke()
+        }
+      }
 
       // HP / XP bars in-canvas so gameplay state is always visible.
       const barW = Math.min(240, state.width * 0.35)
@@ -419,6 +786,56 @@ export default function VampireViewport() {
         ctx.fillText(`POWER UP: ${state.upgradeToast}`, state.width / 2, 36)
       }
 
+      if (state.pausedForUpgrade && !state.gameOver) {
+        ctx.fillStyle = 'rgba(10, 8, 20, 0.72)'
+        ctx.fillRect(0, 0, state.width, state.height)
+
+        ctx.fillStyle = 'rgba(235, 247, 255, 0.96)'
+        ctx.font = 'bold 30px Chakra Petch, sans-serif'
+        ctx.textAlign = 'center'
+        ctx.fillText('Choose an Upgrade', state.width / 2, state.height * 0.19)
+
+        ctx.fillStyle = 'rgba(194, 224, 255, 0.9)'
+        ctx.font = '16px Chakra Petch, sans-serif'
+        ctx.fillText('Press 1, 2, 3 or click a card', state.width / 2, state.height * 0.235)
+
+        const cardRects = getUpgradeCardRects()
+        state.upgradeChoices.forEach((choice, index) => {
+          const card = cardRects[index]
+          if (!card) return
+
+          ctx.fillStyle = 'rgba(26, 28, 46, 0.96)'
+          ctx.fillRect(card.x, card.y, card.w, card.h)
+          ctx.strokeStyle = 'rgba(138, 232, 255, 0.8)'
+          ctx.lineWidth = 2
+          ctx.strokeRect(card.x, card.y, card.w, card.h)
+
+          ctx.fillStyle = 'rgba(145, 250, 197, 0.95)'
+          ctx.font = 'bold 20px Chakra Petch, sans-serif'
+          ctx.textAlign = 'left'
+          ctx.fillText(`${index + 1}. ${choice.label}`, card.x + 14, card.y + 34)
+
+          ctx.fillStyle = 'rgba(224, 236, 255, 0.9)'
+          ctx.font = '15px Chakra Petch, sans-serif'
+          const words = choice.detail.split(' ')
+          const lines = []
+          let line = ''
+          words.forEach((word) => {
+            const next = line ? `${line} ${word}` : word
+            if (ctx.measureText(next).width > card.w - 24) {
+              if (line) lines.push(line)
+              line = word
+            } else {
+              line = next
+            }
+          })
+          if (line) lines.push(line)
+          lines.slice(0, 3).forEach((text, lineIndex) => {
+            ctx.fillText(text, card.x + 14, card.y + 66 + lineIndex * 20)
+          })
+        })
+      }
+
       frameId = window.requestAnimationFrame(loop)
     }
 
@@ -427,18 +844,22 @@ export default function VampireViewport() {
     canvas.addEventListener('mousemove', onPointerMove)
     canvas.addEventListener('mouseenter', onPointerMove)
     canvas.addEventListener('mouseleave', onPointerLeave)
+    canvas.addEventListener('mousedown', onPointerDown)
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
     window.addEventListener('resize', resize)
+    window.addEventListener('vampire:grant-upgrade', onGrantUpgrade)
 
     return () => {
       window.cancelAnimationFrame(frameId)
       canvas.removeEventListener('mousemove', onPointerMove)
       canvas.removeEventListener('mouseenter', onPointerMove)
       canvas.removeEventListener('mouseleave', onPointerLeave)
+      canvas.removeEventListener('mousedown', onPointerDown)
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
       window.removeEventListener('resize', resize)
+      window.removeEventListener('vampire:grant-upgrade', onGrantUpgrade)
     }
   }, [])
 
