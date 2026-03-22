@@ -1078,14 +1078,62 @@ export default function PacmanViewport({ showDebugPaths = false, ghostVisibility
               ctx.arc(px + state.tileW / 2, py + state.tileH / 2, Math.max(3.8, state.unit * 0.16), 0, Math.PI * 2)
               ctx.fill()
             }
-          } else if (cell === '-') {
-            ctx.strokeStyle = 'rgba(255, 192, 240, 0.55)'
-            ctx.lineWidth = Math.max(1.2, state.unit * 0.06)
-            ctx.beginPath()
-            ctx.moveTo(px + state.tileW * 0.15, py + state.tileH / 2)
-            ctx.lineTo(px + state.tileW * 0.85, py + state.tileH / 2)
-            ctx.stroke()
           }
+        }
+      }
+
+      // Draw ghost-pen gate as one continuous beam per contiguous '-' run.
+      for (let y = 0; y < state.height; y += 1) {
+        let x = 0
+        while (x < state.width) {
+          if (state.maze[y][x] !== '-') {
+            x += 1
+            continue
+          }
+
+          const runStart = x
+          while (x < state.width && state.maze[y][x] === '-') {
+            x += 1
+          }
+          const runEnd = x - 1
+
+          const yMid = y * state.tileH + state.tileH / 2
+          const x0 = runStart * state.tileW + state.tileW * 0.12
+          const x1 = (runEnd + 1) * state.tileW - state.tileW * 0.12
+          const pulse = 0.84 + Math.sin(state.blinkTimer * 8.5) * 0.16
+          const beamThickness = Math.min(state.tileH * 0.5, Math.max(3.4, state.unit * 0.22))
+
+          ctx.save()
+          ctx.lineCap = 'round'
+
+          // Outer glow halo
+          ctx.strokeStyle = `rgba(84, 201, 255, ${0.22 + pulse * 0.12})`
+          ctx.lineWidth = Math.min(state.tileH * 0.5, beamThickness * 1.8)
+          ctx.shadowColor = 'rgba(120, 220, 255, 0.85)'
+          ctx.shadowBlur = Math.max(6, state.unit * 0.55)
+          ctx.beginPath()
+          ctx.moveTo(x0, yMid)
+          ctx.lineTo(x1, yMid)
+          ctx.stroke()
+
+          // Main beam body (thicker, capped to half wall height)
+          ctx.shadowBlur = 0
+          ctx.strokeStyle = `rgba(118, 225, 255, ${0.55 + pulse * 0.2})`
+          ctx.lineWidth = beamThickness
+          ctx.beginPath()
+          ctx.moveTo(x0, yMid)
+          ctx.lineTo(x1, yMid)
+          ctx.stroke()
+
+          // Bright laser core
+          ctx.strokeStyle = `rgba(228, 248, 255, ${0.72 + pulse * 0.18})`
+          ctx.lineWidth = Math.max(1, beamThickness * 0.33)
+          ctx.beginPath()
+          ctx.moveTo(x0 + state.tileW * 0.04, yMid)
+          ctx.lineTo(x1 - state.tileW * 0.04, yMid)
+          ctx.stroke()
+
+          ctx.restore()
         }
       }
     }
